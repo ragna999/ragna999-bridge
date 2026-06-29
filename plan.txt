@@ -1,0 +1,245 @@
+# ANVITAFLOW x PHAROS — FULL PLAN
+# ragna999 DeFi Intelligence Agent Bridge
+# Phase 2 Agent Arena Submission
+
+## Overview
+
+Bikin ragna999 jadi agent beneran yang bisa dipanggil agent lain lewat AnvitaFlow.
+Ketika ada yang nanya "Is token X safe?" atau "Best yields on Pharos?", ragna999
+query on-chain contracts kita dan balikin real data.
+
+---
+
+## Architecture
+
+                    ANVITA NETWORK
+                         |
+          +--------------+--------------+
+          |              |              |
+     Agent Lain     User (Web)    Another Agent
+     (A2A send)     (Browser)     (A2A send)
+          |              |              |
+          +------+-------+--------------+
+                 |
+        +--------v----------+
+        |  AnvitaFlow GW    |  hub.anvita.xyz
+        |  (WebSocket)      |  wss://hub.anvita.xyz/ws
+        +--------+----------+
+                 |
+        +--------v----------+
+        |  ragna999         |  <-- BAGIAN YANG KITA BUILD
+        |  Bridge Service   |
+        |                   |
+        |  1. WS Listener   |  Connect ke Gateway
+        |  2. Intent Parser |  Parse user message
+        |  3. Tool Router   |  Route ke handler
+        |  4. Response FX   |  Format & kirim balik
+        +--------+----------+
+                 |
+        +--------v----------+
+        |  Pharos Testnet   |  atlantic.dplabs-internal.com
+        |                   |
+        |  TokenSafety      |  0xdC404a4D7E482e4EC5Ca96215aD45A670Ee82989
+        |  Registry         |
+        |                   |
+        |  YieldRegistry    |  (deployed, need address)
+        |                   |
+        +-------------------+
+
+---
+
+## Tech Stack
+
+| Layer              | Tech              | Why                                    |
+|--------------------|-------------------|----------------------------------------|
+| Gateway Connection | Node.js + WS      | AnvitaFlow Gateway uses WS protocol    |
+| Contract Calls     | ethers.js v6      | Works with Pharos RPC                  |
+| Intent Parser      | Regex + keywords  | No LLM needed, fast & predictable      |
+| Response Format    | JSON (A2A proto)  | Standard AnvitaFlow message format     |
+| Deployment         | Standalone Node.js| WebSocket needs persistent connection  |
+
+---
+
+## Tools (4 Handlers)
+
+### Tool 1: Token Safety Check
+Input:  "Is 0xABC... safe?" / "Check token 0xABC..."
+Flow:   Extract address -> TokenSafetyRegistry.getConsensus(addr)
+        -> If no data: scan via GoPlus API -> write report on-chain
+        -> Return: score, honeypot, mintable, taxes, verdict
+Output: "Token 0xABC... scored 85/100 -- SAFE
+         Honeypot: No | Mintable: No
+         Buy Tax: 5% | Sell: 5%
+         Consensus: 3 reporters agree"
+
+### Tool 2: Yield Scanner
+Input:  "Best yields?" / "Where to earn APY on Pharos?"
+Flow:   YieldRegistry.getAllProtocols() -> for each: getLatestYield()
+        -> Sort by APY, filter by risk level
+Output: "TOP YIELDS ON PHAROS:
+         1. ProtocolX PHRS/USDC -- APY: 45% -- TVL: $1.2M -- Risk: MEDIUM
+         2. ProtocolY PHRS     -- APY: 12% -- TVL: $5M   -- Risk: LOW"
+
+### Tool 3: Batch Safety Scan
+Input:  "Scan top tokens" / "Which tokens are safe?"
+Flow:   Fetch trending tokens -> batchIsTokenSafe(addresses[])
+        -> Return grid
+Output: "SAFETY SCAN RESULTS:
+         [OK] Token A (0x123...) -- Score 92 -- SAFE
+         [!!] Token B (0x456...) -- Score 45 -- CAUTION
+         [XX] Token C (0x789...) -- Score 12 -- AVOID"
+
+### Tool 4: Write Report (Agent -> Contract)
+Input:  Internal trigger when scanning a new token
+Flow:   GoPlus API -> parse safety data -> calculate score
+        -> TokenSafetyRegistry.updateReport(token, score, ...)
+        -> Update consensus
+Output: "Report submitted for 0xABC... -- Score 85/100"
+
+---
+
+## Intent Parser
+
+Simple keyword matching, no LLM:
+
+  function parseIntent(message) {
+    const lower = message.toLowerCase();
+    const addressMatch = message.match(/0x[a-fA-F0-9]{40}/);
+    const address = addressMatch ? addressMatch[0] : null;
+
+    if (/safe|check|honeypot|rug|scam|token.*analyz/i.test(lower) && address) {
+      return { tool: 'tokenSafety', args: { address } };
+    }
+    if (/yield|apy|earn|best.*pool|lend|stake/i.test(lower)) {
+      const risk = /low.*risk|safe/i.test(lower) ? 1 :
+                   /high.*risk|degen/i.test(lower) ? 3 : null;
+      return { tool: 'yieldScan', args: { riskLevel: risk } };
+    }
+    if (/scan|top.*token|trending|which.*safe/i.test(lower)) {
+      return { tool: 'batchScan', args: {} };
+    }
+    if (/wallet|portfolio|address.*0x/i.test(lower) && address) {
+      return { tool: 'walletIntel', args: { address } };
+    }
+    return { tool: 'help', args: {} };
+  }
+
+---
+
+## Implementation Sprint
+
+### Day 1: Foundation
+[ ] Setup project structure (~/ragna999-bridge)
+[ ] Contract interaction layer
+    - ethers.js connect ke Pharos Atlantic Testnet RPC
+    - TokenSafetyRegistry read/write functions
+    - YieldRegistry read functions
+[ ] Test contract calls locally
+    - getConsensus(token) -> verify response
+    - getAllProtocols() -> verify response
+    - updateReport() -> verify write (needs gas)
+
+### Day 2: Bridge Service
+[ ] AnvitaFlow Gateway WebSocket connection
+    - Auth with agent credentials
+    - Listen for incoming messages
+    - Parse A2A message format
+[ ] Intent parser implementation
+[ ] Tool router (intent -> handler -> response)
+[ ] Response formatter
+[ ] Test: send A2A from CLI, receive response
+
+### Day 3: Integration & Testing
+[ ] End-to-end test:
+    - anvitaflow a2a send <ragna999 DID> "Is 0xABC safe?"
+    - Bridge receives -> queries contract -> returns safety report
+[ ] Edge cases:
+    - Unknown token (no data on-chain)
+    - Invalid address
+    - Contract call failure
+[ ] Test with real marketplace agents
+
+### Day 4: Polish & Deploy
+[ ] Error handling & logging
+[ ] Deploy bridge service (VPS or long-running process)
+[ ] Update ragna999 marketplace listing if needed
+[ ] README + demo documentation
+[ ] Submit ke DoraHacks Phase 2
+
+---
+
+## Project Structure
+
+~/ragna999-bridge/
+  package.json
+  .env                          # Pharos RPC, private key, AnvitaFlow creds
+  plan.txt                      # This file
+  src/
+    index.js                    # Entry point - WS connection + message loop
+    gateway.js                  # AnvitaFlow Gateway WebSocket client
+    intent.js                   # Intent parser (keyword matching)
+    router.js                   # Tool router (intent -> handler)
+    response.js                 # Response formatter
+    contracts/
+      provider.js               # ethers.js provider (Pharos RPC)
+      token-safety.js           # TokenSafetyRegistry interactions
+      yield-registry.js         # YieldRegistry interactions
+    tools/
+      token-safety.js           # Token safety check tool
+      yield-scan.js             # Yield scanner tool
+      batch-scan.js             # Batch safety scan tool
+      wallet-intel.js           # Wallet analysis tool
+  test/
+    contracts.test.js           # Contract call tests
+    intent.test.js              # Intent parser tests
+    e2e.test.js                 # End-to-end A2A test
+  README.md
+
+---
+
+## Deliverables
+
+1. ragna999 Bridge Service - Node.js, connect ke AnvitaFlow Gateway
+2. 4 Working Tools - Token safety, yield scan, batch scan, wallet intel
+3. On-chain Data Loop - Agent reads AND writes to contracts
+4. Live Demo - A2A request -> real response dari Pharos testnet
+5. DoraHacks Submission - Phase 2 Agent Arena
+
+---
+
+## Key Config
+
+Pharos Testnet RPC:    https://atlantic.dplabs-internal.com
+Chain ID:              688689
+TokenSafetyRegistry:   0xdC404a4D7E482e4EC5Ca96215aD45A670Ee82989
+YieldRegistry:         (check ~/pharos-defi-skill/out/ for deployed address)
+AnvitaFlow Gateway:    wss://hub.anvita.xyz/ws
+AnvitaFlow Server:     https://flow.anvita.xyz
+Agent DID:             did:anvita:0x90396ea829789e538f94c7fa442385300403f874
+Agent ID:              agent_CAQM6GGZ252W
+
+---
+
+## Risks & Mitigations
+
+| Risk                          | Impact           | Mitigation                              |
+|-------------------------------|------------------|-----------------------------------------|
+| Gateway WS protocol unknown   | Can't connect    | Reverse-engineer dari a2a-plugin.tgz    |
+| Auth status NOT_FOUND         | Inbound blocked  | Resolve dashboard, atau test outbound   |
+| Pharos testnet RPC slow       | Response timeout | Add retry logic + timeout handling      |
+| No DEX data on testnet        | Can't scan trends| Hardcoded token list atau mock data     |
+
+---
+
+## Existing Assets (Reuse)
+
+~/pharos-defi-skill/
+  src/TokenSafetyRegistry.sol   - Multi-agent consensus safety reports
+  src/YieldRegistry.sol         - On-chain DeFi yield data
+  test/TokenSafetyRegistry.t.sol - 36 passing tests
+  SKILL.md                      - Pharos Skill Engine format
+  PHASE2-PLAN.md                - Original Phase 2 plan
+
+AnvitaFlow Agent:  ragna999 (agent_CAQM6GGZ252W)
+Marketplace:       Published, $0.01/call, DeFi Intelligence
+Smart Account:     0x90396ea829789e538f94c7fa442385300403f874
