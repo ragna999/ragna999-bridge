@@ -11,7 +11,7 @@ const ABI_PATH = join(__dirname, '../../abi/TokenSafetyRegistry.json');
 const ABI = JSON.parse(readFileSync(ABI_PATH, 'utf8'));
 
 // Contract address on Pharos Atlantic Testnet
-const CONTRACT_ADDRESS = '0xdC404a4D7E482e4EC5Ca96215aD45A670Ee82989';
+const CONTRACT_ADDRESS = '0xF11c856D021900f9c312e0e80913A7a0D6af40ED';
 
 let contract = null;
 let writeContract = null;

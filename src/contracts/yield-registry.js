@@ -12,7 +12,7 @@ const ABI = JSON.parse(readFileSync(ABI_PATH, 'utf8'));
 
 // YieldRegistry address — update after deployment
 // For now, will be set via env or discovered
-const CONTRACT_ADDRESS = process.env.YIELD_REGISTRY_ADDRESS || null;
+const CONTRACT_ADDRESS = process.env.YIELD_REGISTRY_ADDRESS || '0x6c65B773e1250D40e5902615FDd33d054C455ede';
 
 let contract = null;
 let writeContract = null;
